@@ -9,6 +9,8 @@ void mq2_Init() {
 }
 
 int mq2_ReadGas() {
-    // Đọc điện áp và quy đổi ra số từ 0 - 4095
-    return analogRead(MQ2_PIN); 
+    int rawValue = analogRead(MQ2_PIN);
+    int percent = map(rawValue, 0, 4095, 0, 100); // Chuyển đổi từ thang 0-4095 sang 0-100%
+    
+    return constrain(percent, 0, 100); 
 }

@@ -93,6 +93,9 @@ void setup() {
 void loop() {
     Blynk.run();
 
+    /* NHIỆM VỤ ĐẶC BIỆT: CẬP NHẬT TRẠNG THÁI CỬA */
+    door_Update();
+
     // LẤY THỜI GIAN THỰC CHO TOÀN BỘ HỆ THỐNG DÙNG CHUNG
     unsigned long currentMillis = millis();
 
@@ -104,20 +107,26 @@ void loop() {
 
     static unsigned long thoiDiemCapNhatTFT_Rain = 0;
     if (currentMillis - thoiDiemCapNhatTFT_Rain >= 3000) {
+        mucDoMua = rain_Read();
         display_rainLevel(mucDoMua);
         thoiDiemCapNhatTFT_Rain = currentMillis;
     }
 
     // NHIỆM VỤ 2: QUẸT THẺ RFID
-    // Lưu giá trị ID của thẻ vào memory
-    String cardID = rfid_GetUID();
+
+    static unsigned long thoiGianChoXoa = 0;   
+    static unsigned long thoiDiemBatDauCho = 0;
+    static bool dangTrongTrangThaiChoXoa = false;
+    static String theVuaQuet = "";
+
+   // 1. Quét thẻ liên tục ở mọi chu kỳ vòng lặp 
+    if (!dangTrongTrangThaiChoXoa) {
+        String cardID = rfid_GetUID();
     
     // Nếu có thẻ được quét
     if (cardID != "") {
-
+        theVuaQuet = cardID; // Lưu lại ID để xử lý
         display_ShowUID(cardID);
-
-        delay(1000); // Tạm dừng 1s để đọc kịp chữ
 
     // ====== LOGIC KIỂM TRA THẺ ======
 
@@ -126,28 +135,58 @@ void loop() {
             display_ShowStatus("MO CUA...", ST77XX_GREEN);
             // GỌI HÀM MỞ CỬA 
             door_Unlock(); 
-
-            display_ClearText_Smart("MO CUA...", 20, 180, 2);
-
             SolanMoCua++; 
             
-        } else {
+           // Cấu hình chờ đúng 3 giây (3000ms) rồi xóa
+                thoiGianChoXoa = 3000;
+                thoiDiemBatDauCho = currentMillis;
+                dangTrongTrangThaiChoXoa = true;
+        } 
+        
+        else {
             // NẾU THẺ SAI
             display_ShowStatus("SAI THE!", ST77XX_RED);
-            delay(2000); // Treo màn hình 2 giây cho người ta biết là bị từ chối
 
+           // Cấu hình chờ 3 giây (3000ms) để cảnh báo rồi mới xóa
+                thoiGianChoXoa = 3000;
+                thoiDiemBatDauCho = currentMillis;
+                dangTrongTrangThaiChoXoa = true;
+             
+        }
+    }
+} 
+
+    // 2. Khối đếm giờ chạy ngầm: Tự động dọn dẹp màn hình sau khi hết thời gian chờ
+    if (dangTrongTrangThaiChoXoa && (currentMillis - thoiDiemBatDauCho >= thoiGianChoXoa)) {
+        
+        // Tiến hành xóa chữ trên màn hình 
+        if (theVuaQuet == MASTER_ID) {
+        
+        Serial.println("chuan bi xoa MO CUA... ");
+            display_ClearText_Smart("MO CUA...", 20, 180, 2);
+            
+        } else {
+
+        Serial.println("chuan bi xoa SAI THE! ");
             display_ClearText_Smart("SAI THE!", 20, 180, 2);
         }
-        
-        // Sau khi xử lý xong (mở cửa xong hoặc cảnh báo xong)
-        display_ClearText_Smart("ID: " + cardID, 20, 150, 2);
+
+        Serial.println("chuan bi xoa ID: " + theVuaQuet);
+
+        display_ClearText_Smart("ID: " + theVuaQuet, 20, 150, 2);
+
 
         // Reset lại màn hình về trạng thái chờ 
         display_ShowWaitCard(); 
-    }  
+        
+        // Mở khóa cho phép quét thẻ tiếp theo
+        dangTrongTrangThaiChoXoa = false; 
+    }
 
+    
      // NHIỆM VỤ 3: CẬP NHẬT NỒNG ĐỘ GAS MỖI 1.5 GIÂY
     if (thoiGianHienTai - thoiDiemCapNhatTFT_Gas >= 1500) {
+        // nongDoGas = mq2_ReadGas();
         display_ShowGasLevel(nongDoGas); 
         thoiDiemCapNhatTFT_Gas = thoiGianHienTai; // Reset bộ đếm
     }
@@ -169,7 +208,7 @@ void loop() {
         } 
         else {
             dangODoTreXanh = true;             // Người vừa đi -> Kích hoạt xanh
-            thoiDiemBatXanh = thoiGianHienTai; // Bắt đầu đếm 5s
+            thoiDiemBatXanh = millis(); // Bắt đầu đếm 5s
         }
         
         // Cập nhật lại memory 
@@ -183,41 +222,42 @@ void loop() {
     int mauCanBat = 0; 
 
     // Ngưỡng báo động 
-    int NGUONG_BAO_CHAY = 2000; 
+    int NGUONG_BAO_CHAY = 40; 
+
+    // TỰ ĐỘNG HẠ CỜ XANH KHI ĐỦ 5 GIÂY (Chạy ngầm độc lập bằng millis)
+    if (dangODoTreXanh && (millis() - thoiDiemBatXanh >= 5000)) {
+        dangODoTreXanh = false; 
+    }
 
     // A. XÁC ĐỊNH MÀU CẦN BẬT DỰA VÀO LOGIC ƯU TIÊN
+
+    // ƯU TIÊN 1: BÁO CHÁY! 
     if (nongDoGas > NGUONG_BAO_CHAY) {
-        mauCanBat = 4; // ƯU TIÊN 1: BÁO CHÁY! 
+        mauCanBat = 4; 
     }
+
+    // ƯU TIÊN 2: Có người -> Đỏ báo động
     else if (coNguoi) {
-        // màu cần bật khi có người: ưu tiên ĐỎ > XANH > TRẮNG
-
-        mauCanBat = 1; // Ưu tiên 2: Đỏ báo động
+        mauCanBat = 1; 
     } 
+
+    // ƯU TIÊN 3: TRỜI TỐI -> Bắt buộc bật Trắng
+    else if (doSang >= 0.0 && doSang < 20.0) { 
+        mauCanBat = 3; 
+    }
+    // ƯU TIÊN 4: ĐÈN XANH KHI NGƯỜI VỪA ĐI (Chỉ được bật nếu trời sáng)
     else if (dangODoTreXanh) {
-        mauCanBat = 2; // Ưu tiên 3: Xanh an toàn
-        
-        // Kiểm tra xem đã ôm màu xanh đủ 5000ms chưa?
-        if (thoiGianHienTai - thoiDiemBatXanh >= 5000) {
-            dangODoTreXanh = false; 
+        mauCanBat = 2; // Trời sáng + Đang trong 5s trễ -> Bật Xanh an toàn
+    }
+    // ƯU TIÊN THẤP NHẤT: TRỜI SÁNG, KHÔNG CÓ AI
+    else {
+        if (doSang >= 0.0) {
+            mauCanBat = 0; // Trời sáng -> Tắt đèn
+        } else {
+            mauCanBat = mauLedHienTai; // Giữ nguyên trạng thái cũ
         }
     }
 
-    else {
-        // Ưu tiên 4: Cảm biến ánh sáng
-        
-        // BỘ LỌC NHIỄU: Phải >= 0 mới tin, nếu trả về số âm là do nhiễu I2C -> Bỏ qua
-        if (doSang >= 0.0) { 
-            if (doSang < 20.0) { 
-                mauCanBat = 3; // Trời tối -> Cần bật Trắng
-            } else {
-                mauCanBat = 0; // Trời sáng -> Cần Tắt
-            }
-        } else {
-            // Nếu đọc lỗi (doSang < 0), giữ nguyên màu cũ, không làm gì cả
-            mauCanBat = mauLedHienTai; 
-        }
-    }
 
     // B. CHỈ RA LỆNH CHO IC KHI MÀU BỊ THAY ĐỔI (TUYỆT CHIÊU CHỐNG NHÁY)
     if (mauCanBat != mauLedHienTai) {
@@ -246,5 +286,7 @@ void loop() {
         Blynk.virtualWrite(V3, nongDoGas);
         Blynk.virtualWrite(V4, mucDoMua);
     }
+
 }
+// bla bla 
 

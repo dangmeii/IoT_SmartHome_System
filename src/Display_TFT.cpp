@@ -122,8 +122,8 @@ void display_ShowMotionStatus(bool isDetected) {
         tft.setTextColor(ST77XX_MAGENTA, ST77XX_BLACK);
         tft.print("GAS: ");
         tft.print(gasLevel);
-        tft.print("    ");
-    }
+        tft.print("%  ");
+}
 
     void display_rainLevel(int rainLevel) {
     tft.setCursor(20, 35); // Trục Y = 35 
@@ -131,5 +131,5 @@ void display_ShowMotionStatus(bool isDetected) {
     tft.setTextColor(0x0410, ST77XX_BLACK); // Xanh cổ vịt
     tft.print("RAIN: ");
     tft.print(rainLevel);
-    tft.print("    "); // Quét rác hiển thị
+    tft.print("%  ");// Quét rác hiển thị
 }

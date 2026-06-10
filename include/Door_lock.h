@@ -9,5 +9,7 @@
 
 void door_Init();
 void door_Unlock();
+void door_Update();
+void rfid_Reset();
 
 #endif

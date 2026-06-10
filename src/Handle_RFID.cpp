@@ -28,5 +28,10 @@ String rfid_GetUID() {
     uidString.trim();        // Cắt khoảng trắng dư thừa
     
     mfrc522.PICC_HaltA();    // Cho thẻ off để không đọc lặp liên tục
+
     return uidString;
+}
+
+void rfid_Reset() {
+    mfrc522.PCD_Init(); 
 }
