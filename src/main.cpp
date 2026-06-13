@@ -23,6 +23,14 @@
 // ====== KHAI BÁO MÃ THẺ CHỦ (MASTER CARD) ======
 const String MASTER_ID = "91 D9 F2 06";
 
+// ====== BIẾN TRẠNG THÁI CHO LOGIC QUÉT THẺ ======
+static unsigned long thoiGianChoXoa = 0;   
+static unsigned long thoiDiemBatDauCho = 0;
+static bool dangTrongTrangThaiChoXoa = false;
+static String theVuaQuet = "";
+
+bool cheDoDenNgu = false;
+
 // ===== BIẾN THỜI GIAN CHO DHT11 =====
 // Bắt buộc dùng kiểu unsigned long vì số millis() sẽ rất to
 unsigned long previousDHTMillis = 0;
@@ -46,17 +54,36 @@ int SolanMoCua = 0;
     int nongDoGas = mq2_ReadGas();
 
 // ===== Variable bắn lên Bllnk =====
-    unsigned long thoiDiemCapNhatBlynk = 0;
+unsigned long thoiDiemCapNhatBlynk = 0;
+unsigned long lastGasNotifMillis = 0;
+unsigned long lastRainNotifMillis = 0;
+const unsigned long NOTIF_COOLDOWN = 60000; // Ép 60.000ms (1 phút) mới được bắn thông báo 1 lần
 
 void setupWiFi() {
     WiFiManager wifiManager;
     wifiManager.autoConnect("ESP32-Access-Point");
 }
 
+BLYNK_WRITE(V5) {
+
+    // Nhận giá trị 0 hoặc 1 từ nút bấm dạng Switch trên App
+    int trangThaiNut = param.asInt(); 
+    
+    if (trangThaiNut == 1) {
+        cheDoDenNgu = true;  // Bật đèn ngủ
+
+    // BẮN THÔNG BÁO XÁC NHẬN VỀ ĐIỆN THOẠI
+        Blynk.logEvent("night_light", "Hệ thống: Đã kích hoạt chế độ đèn ngủ màu vàng ấm!");
+
+    } else {
+        cheDoDenNgu = false; // Tắt đèn ngủ
+    }
+}
+
 void setup() {
     // Khởi tạo Serial 
     Serial.begin(115200);
-    // delay(2000);
+    delay(3000);
     setupWiFi();
 
     // Đánh thức Blynk
@@ -114,11 +141,6 @@ void loop() {
 
     // NHIỆM VỤ 2: QUẸT THẺ RFID
 
-    static unsigned long thoiGianChoXoa = 0;   
-    static unsigned long thoiDiemBatDauCho = 0;
-    static bool dangTrongTrangThaiChoXoa = false;
-    static String theVuaQuet = "";
-
    // 1. Quét thẻ liên tục ở mọi chu kỳ vòng lặp 
     if (!dangTrongTrangThaiChoXoa) {
         String cardID = rfid_GetUID();
@@ -165,7 +187,14 @@ void loop() {
         Serial.println("chuan bi xoa MO CUA... ");
             display_ClearText_Smart("MO CUA...", 20, 180, 2);
             
-        } else {
+        }
+        
+        else if (theVuaQuet == "BLYNK") {
+        Serial.println("chuan bi xoa BLYNK OPEN... ");
+            display_ClearText_Smart("BLYNK OPEN...", 20, 180, 2); // Thêm dòng này để xóa đúng chữ Blynk
+        }
+        
+        else {
 
         Serial.println("chuan bi xoa SAI THE! ");
             display_ClearText_Smart("SAI THE!", 20, 180, 2);
@@ -216,13 +245,30 @@ void loop() {
     }
 
     // 3. Khối hiển thị LED 
-    // 0: Tắt | 1: Đỏ | 2: Xanh | 3: Trắng | 4: Tím (Báo cháy)
+    // 0: Tắt | 1: Đỏ | 2: Xanh | 3: Trắng | 4: Tím (Báo cháy) | 5: Vàng (Đèn ngủ)
 
     static int mauLedHienTai = -1; 
     int mauCanBat = 0; 
 
     // Ngưỡng báo động 
     int NGUONG_BAO_CHAY = 40; 
+    int NGUONG_MUA_TO = 70;
+
+    // a) CẢNH BÁO GAS
+    if (nongDoGas > NGUONG_BAO_CHAY) {
+        if (currentMillis - lastGasNotifMillis >= NOTIF_COOLDOWN) {
+            Blynk.logEvent("gas_alarm", "NGUY HIỂM! Phát hiện nồng độ khí Gas vượt ngưỡng an toàn!");
+            lastGasNotifMillis = currentMillis; 
+        }
+    }
+
+    // b) CẢNH BÁO MƯA 
+    if (mucDoMua > NGUONG_MUA_TO) {
+        if (currentMillis - lastRainNotifMillis >= NOTIF_COOLDOWN) {
+            Blynk.logEvent("heavy_rain", "CẢNH BÁO: Trời đang mưa rất to! Hãy chú ý kiểm tra hệ thống cửa.");
+            lastRainNotifMillis = currentMillis; 
+        }
+    }
 
     // TỰ ĐỘNG HẠ CỜ XANH KHI ĐỦ 5 GIÂY (Chạy ngầm độc lập bằng millis)
     if (dangODoTreXanh && (millis() - thoiDiemBatXanh >= 5000)) {
@@ -241,11 +287,16 @@ void loop() {
         mauCanBat = 1; 
     } 
 
-    // ƯU TIÊN 3: TRỜI TỐI -> Bắt buộc bật Trắng
+    // ƯU TIÊN 3: BẬT ĐÈN NGỦ QUA BLYNK -> VÀNG
+    else if (cheDoDenNgu) {
+        mauCanBat = 5; 
+    }
+
+    // ƯU TIÊN 4: TRỜI TỐI -> Bắt buộc bật Trắng
     else if (doSang >= 0.0 && doSang < 20.0) { 
         mauCanBat = 3; 
     }
-    // ƯU TIÊN 4: ĐÈN XANH KHI NGƯỜI VỪA ĐI (Chỉ được bật nếu trời sáng)
+    // ƯU TIÊN 5: ĐÈN XANH KHI NGƯỜI VỪA ĐI (Chỉ được bật nếu trời sáng)
     else if (dangODoTreXanh) {
         mauCanBat = 2; // Trời sáng + Đang trong 5s trễ -> Bật Xanh an toàn
     }
@@ -263,6 +314,7 @@ void loop() {
     if (mauCanBat != mauLedHienTai) {
         if (mauCanBat == 4)      rgb_SetColor(255, 0, 255);   // Tím (Báo cháy)
         else if (mauCanBat == 1) rgb_SetColor(255, 0, 0);     // Đỏ
+        else if (mauCanBat == 5) rgb_SetColor(255, 255, 0);   // Vàng (Đèn ngủ)
         else if (mauCanBat == 2) rgb_SetColor(0, 255, 0);     // Xanh
         else if (mauCanBat == 3) rgb_SetColor(255, 255, 255); // Trắng
         else if (mauCanBat == 0) rgb_SetColor(0, 0, 0);       // Tắt hoàn toàn
@@ -288,5 +340,6 @@ void loop() {
     }
 
 }
+
 // bla bla 
 
