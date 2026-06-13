@@ -27,10 +27,10 @@ void display_ShowTestMessage() {
     // Test hiển thị
     tft.fillScreen(ST77XX_BLACK);
     
-    tft.setTextColor(ST77XX_YELLOW);
-    tft.setTextSize(2);
-    tft.setCursor(20, 60);
-    tft.print("NHOM 3 DEP TRAI");
+    // tft.setTextColor(ST77XX_YELLOW);
+    // tft.setTextSize(2);
+    // tft.setCursor(20, 60);
+    // tft.print("NHOM 3 DEP TRAI");
 }
 
 // HÀM RFID

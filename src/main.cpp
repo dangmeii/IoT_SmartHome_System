@@ -58,6 +58,7 @@ unsigned long thoiDiemCapNhatBlynk = 0;
 unsigned long lastGasNotifMillis = 0;
 unsigned long lastRainNotifMillis = 0;
 const unsigned long NOTIF_COOLDOWN = 60000; // Ép 60.000ms (1 phút) mới được bắn thông báo 1 lần
+unsigned long lastUnknownCardNotifMillis = 0;
 
 void setupWiFi() {
     WiFiManager wifiManager;
@@ -107,8 +108,8 @@ void setup() {
 
     // Hàm in chữ + chờ quét thẻ
     display_ShowTestMessage();
-    delay(1000);
-    display_ClearText_Smart("NHOM 3 DEP TRAI", 20, 60, 2);
+    // delay(1000);
+    // display_ClearText_Smart("NHOM 3 DEP TRAI", 20, 60, 2);
     display_ShowWaitCard();
     display_ShowMotionStatus(motion_Detected());
 
@@ -169,6 +170,12 @@ void loop() {
             // NẾU THẺ SAI
             display_ShowStatus("SAI THE!", ST77XX_RED);
 
+            if (currentMillis - lastUnknownCardNotifMillis >= NOTIF_COOLDOWN) {
+                // Gửi thông báo kèm theo cái mã UID của thẻ lạ đó lên App luôn để check lịch sử
+                Blynk.logEvent("unknown_card", "CẢNH BÁO: Phát hiện thẻ lạ cố tình truy cập! UID: " + cardID);
+                lastUnknownCardNotifMillis = currentMillis; // Lưu mốc thời gian đã bắn tin
+            }
+            
            // Cấu hình chờ 3 giây (3000ms) để cảnh báo rồi mới xóa
                 thoiGianChoXoa = 3000;
                 thoiDiemBatDauCho = currentMillis;
